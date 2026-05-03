@@ -1,0 +1,37 @@
+{
+  "name": "zeroclaw",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Constitutional agent framework. Two roles, one mechanism, zero trust.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run --dir packages/core/test/unit --dir packages/safeswap/test/unit",
+    "test:integration": "vitest run --dir packages/core/test/integration --dir packages/safeswap/test/integration",
+    "test:e2e": "vitest run --dir packages/core/test/e2e --dir packages/safeswap/test/e2e",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "demo:mock": "EXECUTION_BACKEND=mock INFERENCE_BACKEND=mock tsx scripts/demo.ts",
+    "demo:testnet": "EXECUTION_BACKEND=keeperhub INFERENCE_BACKEND=zerog tsx scripts/demo.ts",
+    "zerog:list": "tsx scripts/zerog-list.ts",
+    "zerog:fund": "tsx scripts/zerog-fund.ts"
+  },
+  "dependencies": {
+    "@0gfoundation/0g-compute-ts-sdk": "^0.8.0",
+    "@zeroclaw/core": "workspace:*",
+    "@zeroclaw/safeswap": "workspace:*",
+    "dotenv-flow": "^4.1.0",
+    "ethers": "6.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "packageManager": "pnpm@8.5.1",
+  "engines": {
+    "node": ">=20"
+  }
+}
