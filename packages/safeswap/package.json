@@ -1,0 +1,19 @@
+{
+  "name": "@zeroclaw/safeswap",
+  "version": "0.1.0",
+  "description": "Example agent built on @zeroclaw/core: Uniswap rebalancer with Proposer/Critic deliberation.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@zeroclaw/core": "workspace:*",
+    "fastify": "^5.8.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
