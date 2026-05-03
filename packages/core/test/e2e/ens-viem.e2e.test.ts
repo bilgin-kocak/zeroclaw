@@ -32,4 +32,21 @@ describe.skipIf(!enabled)("ENS viem resolver e2e (RUN_ENS_TESTS=1)", () => {
     },
     120_000,
   );
+
+  it(
+    "capability roundtrip on the proposer subname",
+    async () => {
+      const r = buildResolver();
+      const name = process.env.ENS_PROPOSER_SUBNAME!;
+      const caps = ["propose:swap", `ts:${Date.now()}`];
+      await r.setProfile(name, {
+        capabilities: caps,
+        reputationPointer: `0x${"a".repeat(64)}`,
+      });
+      const got = await r.resolveProfile(name);
+      expect(got?.capabilities).toEqual(caps);
+      expect(got?.reputationPointer).toBe(`0x${"a".repeat(64)}`);
+    },
+    180_000,
+  );
 });

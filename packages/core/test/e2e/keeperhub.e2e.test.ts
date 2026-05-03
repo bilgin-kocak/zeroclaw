@@ -41,25 +41,27 @@ describe.skipIf(!enabled)(
       60_000,
     );
 
-    // The actual swap path requires a wallet integration to be configured in
-    // the KeeperHub dashboard. Gated by a separate flag so the connectivity
-    // tests above can pass before the wallet is wired.
+    // Real Sepolia native transfer through the KeeperHub-managed wallet.
+    // Proves: session → tools/call → executionId → polling → final tx hash.
+    // Requires the KeeperHub-managed wallet to have ~0.001 Sepolia ETH for
+    // gas; run `pnpm fund:keeperhub-wallet sepolia 0.02` first.
     it.skipIf(!process.env.RUN_KEEPERHUB_SWAP_TEST)(
-      "small ETH->USDC swap returns a tx hash (requires wallet integration)",
+      "real native transfer on Sepolia returns a tx hash",
       async () => {
         const k = buildBackend();
         const r = await k.execute({
-          kind: "swap",
+          kind: "transfer",
           params: {
-            tokenIn: "ETH",
-            tokenOut: "USDC",
-            amountIn: "1000000000000000",
-            chainId: Number(process.env.UNICHAIN_CHAIN_ID ?? "1301"),
+            chainId: 11155111,
+            recipient: "0xFd565A6c2a99Cd68c4ef224Fe24cCc758C6eEA4c",
+            amount: "0.001",
           },
-          constraints: { slippageBps: 100 },
-          nonce: `e2e-${Date.now()}`,
+          constraints: {},
+          nonce: `e2e-transfer-${Date.now()}`,
         });
-        expect(r.txHash).toMatch(/^0x[0-9a-fA-F]+$/);
+        expect(r.txHash).toMatch(/^0x[0-9a-fA-F]{64}$/);
+        expect(r.status).toBe("success");
+        expect(r.explorerUrl).toContain(r.txHash);
       },
       120_000,
     );

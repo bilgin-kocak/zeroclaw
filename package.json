@@ -15,14 +15,18 @@
     "demo:mock": "EXECUTION_BACKEND=mock INFERENCE_BACKEND=mock tsx scripts/demo.ts",
     "demo:testnet": "EXECUTION_BACKEND=keeperhub INFERENCE_BACKEND=zerog tsx scripts/demo.ts",
     "zerog:list": "tsx scripts/zerog-list.ts",
-    "zerog:fund": "tsx scripts/zerog-fund.ts"
+    "zerog:fund": "tsx scripts/zerog-fund.ts",
+    "ens:subnames": "tsx scripts/ens-setup-subnames.ts",
+    "keeperhub:integrations": "tsx scripts/keeperhub-integrations.ts",
+    "fund:keeperhub-wallet": "tsx scripts/fund-keeperhub-wallet.ts"
   },
   "dependencies": {
     "@0gfoundation/0g-compute-ts-sdk": "^0.8.0",
     "@zeroclaw/core": "workspace:*",
     "@zeroclaw/safeswap": "workspace:*",
     "dotenv-flow": "^4.1.0",
-    "ethers": "6.13.1"
+    "ethers": "6.13.1",
+    "viem": "^2.48.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

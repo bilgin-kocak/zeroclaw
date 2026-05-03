@@ -55,7 +55,9 @@ export class KeeperHubExecutionBackend implements ExecutionBackend {
 
   async execute(req: ExecutionRequest): Promise<ExecutionReceipt> {
     const sessionId = await this.ensureSession();
-    const toolName = this.cfg.toolName ?? "execute_protocol_action";
+    const toolName =
+      this.cfg.toolName ??
+      (req.kind === "transfer" ? "execute_transfer" : "execute_protocol_action");
     const buildArgs = this.cfg.buildToolArgs ?? defaultBuildToolArgs;
     const result = await this.rpc(sessionId, "tools/call", {
       name: toolName,
@@ -65,7 +67,37 @@ export class KeeperHubExecutionBackend implements ExecutionBackend {
           : {}),
       }),
     });
-    return parseReceipt(result, this.cfg);
+    let receipt = parseReceipt(result, this.cfg);
+    // KeeperHub returns an executionId synchronously; the tx hash arrives
+    // when the execution finalizes. Poll get_direct_execution_status until
+    // we have a hash or a hard failure.
+    const executionId = extractExecutionId(result);
+    if (!receipt.txHash && executionId) {
+      receipt = await this.pollExecution(sessionId, executionId, receipt);
+    }
+    return receipt;
+  }
+
+  private async pollExecution(
+    sessionId: string,
+    executionId: string,
+    fallback: ExecutionReceipt,
+  ): Promise<ExecutionReceipt> {
+    const deadline = Date.now() + 90_000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 3_000));
+      // NOTE: get_direct_execution_status uses snake_case `execution_id`
+      // even though execute_transfer / execute_protocol_action return
+      // camelCase `executionId`. Captured in feedback/KEEPERHUB_FEEDBACK.md.
+      const result = await this.rpc(sessionId, "tools/call", {
+        name: "get_direct_execution_status",
+        arguments: { execution_id: executionId },
+      });
+      const next = parseReceipt(result, this.cfg);
+      if (next.status === "success" || next.status === "failed") return next;
+      if (next.txHash) return next;
+    }
+    return fallback;
   }
 
   /** Lower-level: call any MCP tool by name. Used by callers that need to
@@ -178,30 +210,67 @@ export class KeeperHubExecutionBackend implements ExecutionBackend {
 
 const defaultBuildToolArgs = (
   req: ExecutionRequest,
-  cfg: { walletIntegrationId?: string },
+  _cfg: { walletIntegrationId?: string },
 ): Record<string, unknown> => {
+  // KeeperHub's execute_protocol_action expects:
+  //   { actionType: "<protocol>/<action-slug>", params: { ... } }
+  // Use search_protocol_actions for the requiredFields per action.
   if (req.kind === "swap") {
     const p = req.params as Record<string, unknown>;
     return {
-      protocol: "uniswap",
-      action: "swap",
-      chainId: p.chainId,
-      tokenIn: p.tokenIn,
-      tokenOut: p.tokenOut,
-      amountIn: p.amountIn,
-      slippageBps: req.constraints.slippageBps ?? req.constraints.expectedSlippage ?? 50,
-      ...(cfg.walletIntegrationId
-        ? { walletIntegrationId: cfg.walletIntegrationId }
-        : {}),
+      actionType: "uniswap/swap-exact-input",
+      params: {
+        network: String(p.chainId),
+        tokenIn: String(p.tokenIn),
+        tokenOut: String(p.tokenOut),
+        amountIn: String(p.amountIn),
+        slippageBps: String(
+          req.constraints.slippageBps ?? req.constraints.expectedSlippage ?? 50,
+        ),
+        deadline: String(
+          Math.floor(Date.now() / 1000) +
+            (req.constraints.deadlineSeconds ?? 600),
+        ),
+      },
+    };
+  }
+  if (req.kind === "transfer") {
+    const p = req.params as Record<string, unknown>;
+    return {
+      network: String(p.chainId ?? p.network ?? "11155111"),
+      recipient_address: String(p.recipient ?? p.to),
+      amount: String(p.amount),
+      ...(p.tokenAddress ? { token_address: String(p.tokenAddress) } : {}),
     };
   }
   return {
     ...req.params,
     constraints: req.constraints,
-    ...(cfg.walletIntegrationId
-      ? { walletIntegrationId: cfg.walletIntegrationId }
-      : {}),
   };
+};
+
+const extractExecutionId = (
+  result: Record<string, unknown> | undefined,
+): string | null => {
+  if (!result) return null;
+  const direct =
+    (result.executionId as string | undefined) ??
+    (result.execution_id as string | undefined);
+  if (direct) return direct;
+  const content = result.content as { type: string; text: string }[] | undefined;
+  if (content?.[0]?.text) {
+    try {
+      const parsed = JSON.parse(content[0].text) as Record<string, unknown>;
+      return (
+        (parsed.executionId as string | undefined) ??
+        (parsed.execution_id as string | undefined) ??
+        null
+      );
+    } catch {
+      return null;
+    }
+  }
+  return null;
 };
 
 const parseReceipt = (
@@ -223,9 +292,19 @@ const parseReceipt = (
   const txHash = String(
     payload.txHash ?? payload.hash ?? payload.transactionHash ?? "",
   );
-  const status =
-    (payload.status as ExecutionReceipt["status"]) ??
-    (txHash ? "pending" : "failed");
+  // KeeperHub uses "completed" / "failed" / "running" — normalize to our
+  // ExecutionReceipt vocabulary (success / failed / pending).
+  const rawStatus = String(payload.status ?? "").toLowerCase();
+  const status: ExecutionReceipt["status"] =
+    rawStatus === "completed" || rawStatus === "success"
+      ? "success"
+      : rawStatus === "failed" || rawStatus === "error"
+        ? "failed"
+        : txHash
+          ? "pending"
+          : rawStatus === ""
+            ? "pending"
+            : "pending";
   const blockNumber =
     payload.blockNumber !== undefined ? Number(payload.blockNumber) : undefined;
   const explorerBase = cfg.explorerBase ?? "https://sepolia.uniscan.xyz/tx";

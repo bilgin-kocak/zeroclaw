@@ -5,6 +5,9 @@ export interface ExecutionRequest {
   nonce: string;
 }
 
+// "transfer" is included in the union above for KeeperHubExecutionBackend's
+// smoke-test path; the SafeSwap demo path always uses kind="swap".
+
 export interface ExecutionAttempt {
   txHash: string;
   revertReason?: string;
